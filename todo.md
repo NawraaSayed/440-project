@@ -667,17 +667,30 @@ The Random Forest model performed well for credit risk analysis because it achie
 
 ## 17. Final Checklist
 
+**Progress:** 10 / 32 tasks completed = **31.25% done**
+
+### Completed Items Summary
+
+- Dataset loaded from `LoanDataset - LoansDatasest.csv`
+- Shape: 32,586 rows and 13 columns
+- Columns: `customer_id`, `customer_age`, `customer_income`, `home_ownership`, `employment_duration`, `loan_intent`, `loan_grade`, `loan_amnt`, `loan_int_rate`, `term_years`, `historical_default`, `cred_hist_length`, `Current_loan_status`
+- Missing values found in `customer_id` (3), `employment_duration` (895), `loan_amnt` (1), `loan_int_rate` (3,116), `historical_default` (20,737), and `Current_loan_status` (4)
+- Target distribution: `NO DEFAULT` = 25,742, `DEFAULT` = 6,840, missing = 4
+- Cleaned dataset saved as `loan_dataset_cleaned.csv`
+- Removed `customer_id`, removed 4 rows with missing `Current_loan_status`, cleaned `customer_income` and `loan_amnt`, and converted target values to `0 = NO DEFAULT` and `1 = DEFAULT`
+- Target distribution graph saved as `target_distribution.svg`
+
 ```text
-[ ] Load dataset
-[ ] Check shape, columns, data types
-[ ] Check missing values
-[ ] Check target distribution
-[ ] Drop customer_id
-[ ] Drop rows with missing Current_loan_status
-[ ] Clean customer_income
-[ ] Clean loan_amnt
-[ ] Convert target: DEFAULT = 1, NO DEFAULT = 0
-[ ] Create target distribution graph
+[x] Load dataset
+[x] Check shape, columns, data types
+[x] Check missing values
+[x] Check target distribution
+[x] Drop customer_id
+[x] Drop rows with missing Current_loan_status
+[x] Clean customer_income
+[x] Clean loan_amnt
+[x] Convert target: DEFAULT = 1, NO DEFAULT = 0
+[x] Create target distribution graph
 [ ] Create loan grade vs default graph
 [ ] Create interest rate boxplot
 [ ] Create income boxplot
