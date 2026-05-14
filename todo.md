@@ -667,7 +667,7 @@ The Random Forest model performed well for credit risk analysis because it achie
 
 ## 17. Final Checklist
 
-**Progress:** 10 / 32 tasks completed = **31.25% done**
+**Progress:** 20 / 32 tasks completed = **62.50% done**
 
 ### Completed Items Summary
 
@@ -678,7 +678,18 @@ The Random Forest model performed well for credit risk analysis because it achie
 - Target distribution: `NO DEFAULT` = 25,742, `DEFAULT` = 6,840, missing = 4
 - Cleaned dataset saved as `loan_dataset_cleaned.csv`
 - Removed `customer_id`, removed 4 rows with missing `Current_loan_status`, cleaned `customer_income` and `loan_amnt`, and converted target values to `0 = NO DEFAULT` and `1 = DEFAULT`
-- Target distribution graph saved as `target_distribution.svg`
+- Target distribution graph saved as `figures/target_distribution.svg`
+- Loan grade vs default graph saved as `figures/loan_grade_vs_default.svg`
+- Interest rate by loan status boxplot saved as `figures/interest_rate_by_loan_status.svg`
+- Customer income by loan status boxplot saved as `figures/customer_income_by_loan_status.svg` with the y-axis capped at the 95th percentile to make the central distribution readable
+- Loan amount by loan status boxplot saved as `figures/loan_amount_by_loan_status.svg` with the y-axis capped at the 99th percentile because extreme outliers made the original graph unclear
+- Correlation heatmap saved as `figures/correlation_heatmap.svg`
+- Features and target separated using `Current_loan_status` as the target
+- Numerical features defined: `customer_age`, `customer_income`, `employment_duration`, `loan_amnt`, `loan_int_rate`, `term_years`, `cred_hist_length`
+- Categorical features defined: `home_ownership`, `loan_intent`, `loan_grade`, `historical_default`
+- Preprocessing pipeline built with median imputation for numerical features and most-frequent imputation plus one-hot encoding for categorical features
+- Stratified train/test split completed with 26,065 training rows and 6,517 testing rows
+- Preprocessing summary saved as `preprocessing_summary.json`
 
 ```text
 [x] Load dataset
@@ -691,16 +702,16 @@ The Random Forest model performed well for credit risk analysis because it achie
 [x] Clean loan_amnt
 [x] Convert target: DEFAULT = 1, NO DEFAULT = 0
 [x] Create target distribution graph
-[ ] Create loan grade vs default graph
-[ ] Create interest rate boxplot
-[ ] Create income boxplot
-[ ] Create loan amount boxplot
-[ ] Create correlation heatmap
-[ ] Split X and y
-[ ] Define numerical columns
-[ ] Define categorical columns
-[ ] Build preprocessing pipeline
-[ ] Split train/test using stratify
+[x] Create loan grade vs default graph
+[x] Create interest rate boxplot
+[x] Create income boxplot
+[x] Create loan amount boxplot
+[x] Create correlation heatmap
+[x] Split X and y
+[x] Define numerical columns
+[x] Define categorical columns
+[x] Build preprocessing pipeline
+[x] Split train/test using stratify
 [ ] Build Random Forest pipeline
 [ ] Train Random Forest
 [ ] Predict test data
