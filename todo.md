@@ -667,7 +667,7 @@ The Random Forest model performed well for credit risk analysis because it achie
 
 ## 17. Final Checklist
 
-**Progress:** 20 / 32 tasks completed = **62.50% done**
+**Progress:** 32 / 32 tasks completed = **100.00% done**
 
 ### Completed Items Summary
 
@@ -686,10 +686,22 @@ The Random Forest model performed well for credit risk analysis because it achie
 - Correlation heatmap saved as `figures/correlation_heatmap.svg`
 - Features and target separated using `Current_loan_status` as the target
 - Numerical features defined: `customer_age`, `customer_income`, `employment_duration`, `loan_amnt`, `loan_int_rate`, `term_years`, `cred_hist_length`
-- Categorical features defined: `home_ownership`, `loan_intent`, `loan_grade`, `historical_default`
+- Categorical features defined: `home_ownership`, `loan_intent`, `loan_grade`
+- `historical_default` excluded from the final model because its missing values perfectly identify `NO DEFAULT` rows, which creates target leakage and inflates accuracy
 - Preprocessing pipeline built with median imputation for numerical features and most-frequent imputation plus one-hot encoding for categorical features
 - Stratified train/test split completed with 26,065 training rows and 6,517 testing rows
 - Preprocessing summary saved as `preprocessing_summary.json`
+- Random Forest pipeline built using preprocessing plus a regularized `RandomForestClassifier(n_estimators=200, max_depth=20, min_samples_split=5, min_samples_leaf=2, random_state=42, class_weight="balanced")`
+- Random Forest trained on 26,065 training rows
+- Predictions and probabilities generated for 6,517 testing rows
+- Final Random Forest metrics saved in `preprocessing_summary.json` after removing leakage: Accuracy = 0.9190, F1 Score = 0.7901, MSE = 0.0810, ROC AUC = 0.9313
+- Classification report saved as `classification_report.txt`
+- Confusion matrix graph saved as `figures/confusion_matrix.svg`
+- ROC curve graph saved as `figures/roc_curve.svg`
+- Feature importance graph saved as `figures/feature_importance.svg`; full feature importances saved as `feature_importance.csv`
+- Optional focused GridSearchCV tuning completed and saved as `tuning_summary.json`; tuned test F1 Score = 0.7888 and tuned ROC AUC = 0.9322
+- Final results table saved as `results_table.csv`
+- Report explanation written in `report_explanation.md`
 
 ```text
 [x] Load dataset
@@ -712,19 +724,19 @@ The Random Forest model performed well for credit risk analysis because it achie
 [x] Define categorical columns
 [x] Build preprocessing pipeline
 [x] Split train/test using stratify
-[ ] Build Random Forest pipeline
-[ ] Train Random Forest
-[ ] Predict test data
-[ ] Calculate Accuracy
-[ ] Calculate F1 Score
-[ ] Calculate MSE
-[ ] Print classification report
-[ ] Create confusion matrix graph
-[ ] Create ROC curve
-[ ] Create feature importance graph
-[ ] Optional: tune model using GridSearchCV
-[ ] Save final results table
-[ ] Write report explanation
+[x] Build Random Forest pipeline
+[x] Train Random Forest
+[x] Predict test data
+[x] Calculate Accuracy
+[x] Calculate F1 Score
+[x] Calculate MSE
+[x] Print classification report
+[x] Create confusion matrix graph
+[x] Create ROC curve
+[x] Create feature importance graph
+[x] Optional: tune model using GridSearchCV
+[x] Save final results table
+[x] Write report explanation
 ```
 
 ---

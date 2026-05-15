@@ -1,0 +1,49 @@
+Random Forest Classification Report
+===================================
+
+Model setup:
+- Target column: Current_loan_status
+- 0 = NO DEFAULT
+- 1 = DEFAULT
+- Excluded feature: historical_default
+
+Important note:
+The historical_default column was excluded from the final model because its missing values perfectly identify NO DEFAULT rows in this dataset. Keeping it would cause target leakage and make the accuracy look unrealistically high.
+
+Final metrics:
+- Accuracy: 0.9044
+- F1 Score for DEFAULT: 0.7704
+- MSE: 0.0956
+- ROC AUC: 0.9274
+
+Overfitting diagnostics:
+- Assessment: No major overfitting signal
+- Train Accuracy: 0.9409
+- Test Accuracy: 0.9044
+- Accuracy Gap: 0.0365
+- Train F1 Score for DEFAULT: 0.8605
+- Test F1 Score for DEFAULT: 0.7704
+- F1 Gap: 0.0901
+- Cross-validation F1 mean: 0.7601
+- Cross-validation F1 std: 0.0021
+
+Confusion matrix:
+- True NO DEFAULT predicted as NO DEFAULT: 4849
+- True NO DEFAULT predicted as DEFAULT: 300
+- True DEFAULT predicted as NO DEFAULT: 323
+- True DEFAULT predicted as DEFAULT: 1045
+
+Detailed classification report:
+
+              precision    recall  f1-score   support
+
+  NO DEFAULT       0.94      0.94      0.94      5149
+     DEFAULT       0.78      0.76      0.77      1368
+
+    accuracy                           0.90      6517
+   macro avg       0.86      0.85      0.86      6517
+weighted avg       0.90      0.90      0.90      6517
+
+
+Interpretation:
+The model performs very well for the NO DEFAULT class and gives a useful result for the DEFAULT class. For DEFAULT customers, precision is 0.78, meaning most customers predicted as DEFAULT really did default. Recall is 0.76, meaning the model detects about 76.39% of actual DEFAULT cases. Since missing a default customer is important in credit risk, the DEFAULT recall and F1 score should be discussed alongside accuracy.
