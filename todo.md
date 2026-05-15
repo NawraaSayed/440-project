@@ -27,9 +27,9 @@ The model will use customer and loan information such as:
 - Loan intent
 - Loan grade
 - Loan amount
-- Interest rate
+- Interest rate (EDA only; excluded from final pre-approval model)
 - Loan term
-- Historical default
+- Historical default (excluded from final model due to leakage)
 - Credit history length
 
 ---
@@ -279,7 +279,6 @@ numeric_features = [
     "customer_income",
     "employment_duration",
     "loan_amnt",
-    "loan_int_rate",
     "term_years",
     "cred_hist_length"
 ]
@@ -290,11 +289,11 @@ numeric_features = [
 ```python
 categorical_features = [
     "home_ownership",
-    "loan_intent",
-    "loan_grade",
-    "historical_default"
+    "loan_intent"
 ]
 ```
+
+`historical_default`, `loan_grade`, and `loan_int_rate` are excluded from the final model. `historical_default` leaks the target because missing values identify `NO DEFAULT` rows. `loan_grade` and `loan_int_rate` are lender-assigned underwriting/pricing fields, so they can act as proxy leakage for a pre-approval credit-risk model.
 
 ---
 
@@ -362,7 +361,9 @@ rf_model = Pipeline(steps=[
     ("preprocessor", preprocessor),
     ("classifier", RandomForestClassifier(
         n_estimators=200,
-        max_depth=None,
+        max_depth=12,
+        min_samples_split=20,
+        min_samples_leaf=10,
         random_state=42,
         class_weight="balanced"
     ))
@@ -374,7 +375,9 @@ rf_model = Pipeline(steps=[
 | Parameter | Meaning |
 |---|---|
 | `n_estimators=200` | The model uses 200 decision trees |
-| `max_depth=None` | Trees can grow until fully expanded |
+| `max_depth=12` | Limits tree depth to reduce overfitting |
+| `min_samples_split=20` | Requires more samples before splitting a node |
+| `min_samples_leaf=10` | Requires enough samples in each leaf to reduce overfitting |
 | `random_state=42` | Makes results reproducible |
 | `class_weight="balanced"` | Helps with class imbalance |
 
@@ -685,16 +688,19 @@ The Random Forest model performed well for credit risk analysis because it achie
 - Loan amount by loan status boxplot saved as `figures/loan_amount_by_loan_status.svg` with the y-axis capped at the 99th percentile because extreme outliers made the original graph unclear
 - Correlation heatmap saved as `figures/correlation_heatmap.svg`
 - Features and target separated using `Current_loan_status` as the target
-- Numerical features defined: `customer_age`, `customer_income`, `employment_duration`, `loan_amnt`, `loan_int_rate`, `term_years`, `cred_hist_length`
-- Categorical features defined: `home_ownership`, `loan_intent`, `loan_grade`
+- Numerical features defined for final model: `customer_age`, `customer_income`, `employment_duration`, `loan_amnt`, `term_years`, `cred_hist_length`
+- Categorical features defined for final model: `home_ownership`, `loan_intent`
 - `historical_default` excluded from the final model because its missing values perfectly identify `NO DEFAULT` rows, which creates target leakage and inflates accuracy
+- `loan_grade` and `loan_int_rate` excluded from the final model because they are lender-assigned underwriting/pricing fields and can act as proxy leakage in a pre-approval prediction setting
 - Preprocessing pipeline built with median imputation for numerical features and most-frequent imputation plus one-hot encoding for categorical features
 - Stratified train/test split completed with 26,065 training rows and 6,517 testing rows
 - Preprocessing summary saved as `preprocessing_summary.json`
-- Random Forest pipeline built using preprocessing plus a regularized `RandomForestClassifier(n_estimators=200, max_depth=20, min_samples_split=5, min_samples_leaf=2, random_state=42, class_weight="balanced")`
+- Random Forest pipeline built using preprocessing plus a regularized `RandomForestClassifier(n_estimators=200, max_depth=12, min_samples_split=20, min_samples_leaf=10, random_state=42, class_weight="balanced")`
 - Random Forest trained on 26,065 training rows
 - Predictions and probabilities generated for 6,517 testing rows
-- Final Random Forest metrics saved in `preprocessing_summary.json` after removing leakage: Accuracy = 0.9190, F1 Score = 0.7901, MSE = 0.0810, ROC AUC = 0.9313
+- Final Random Forest metrics saved in `preprocessing_summary.json` after removing leakage/proxy-leakage fields: Accuracy = 0.8215, F1 Score = 0.6122, MSE = 0.1785, ROC AUC = 0.8488
+- Overfitting diagnostics saved: train F1 = 0.6726, test F1 = 0.6122, F1 gap = 0.0604, assessment = no major overfitting signal
+- Red-flag checks saved: majority baseline accuracy = 0.7901, shuffled-target ROC AUC = 0.5040, and known leakage column `historical_default` raises accuracy to 0.9538
 - Classification report saved as `classification_report.txt`
 - Confusion matrix graph saved as `figures/confusion_matrix.svg`
 - ROC curve graph saved as `figures/roc_curve.svg`

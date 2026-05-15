@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from sklearn.compose import ColumnTransformer
+from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
@@ -37,7 +38,6 @@ NUMERIC_FEATURES = [
     "customer_income",
     "employment_duration",
     "loan_amnt",
-    "loan_int_rate",
     "term_years",
     "cred_hist_length",
 ]
@@ -45,14 +45,21 @@ NUMERIC_FEATURES = [
 CATEGORICAL_FEATURES = [
     "home_ownership",
     "loan_intent",
-    "loan_grade",
 ]
 
 EXCLUDED_FEATURES = {
     "historical_default": (
         "Excluded from modeling because its missing values perfectly identify NO DEFAULT rows "
         "in this dataset, which inflates accuracy through target leakage."
-    )
+    ),
+    "loan_grade": (
+        "Excluded from the final model because it is commonly assigned during underwriting "
+        "and can act as a proxy for the lender's own risk decision."
+    ),
+    "loan_int_rate": (
+        "Excluded from the final model because it is commonly assigned after risk pricing "
+        "and can act as a proxy for the lender's own risk decision."
+    ),
 }
 
 
@@ -158,9 +165,9 @@ def build_random_forest_model(preprocessor: ColumnTransformer) -> Pipeline:
                 "classifier",
                 RandomForestClassifier(
                     n_estimators=200,
-                    max_depth=16,
-                    min_samples_split=10,
-                    min_samples_leaf=5,
+                    max_depth=12,
+                    min_samples_split=20,
+                    min_samples_leaf=10,
                     random_state=42,
                     class_weight="balanced",
                     n_jobs=-1,
@@ -227,9 +234,9 @@ def save_feature_importance_graph(rf_model: Pipeline) -> pd.DataFrame:
 def run_focused_grid_search(rf_model: Pipeline, X_train: pd.DataFrame, y_train: pd.Series) -> GridSearchCV:
     param_grid = {
         "classifier__n_estimators": [200],
-        "classifier__max_depth": [14, 16],
-        "classifier__min_samples_split": [10],
-        "classifier__min_samples_leaf": [5],
+        "classifier__max_depth": [10, 12],
+        "classifier__min_samples_split": [20],
+        "classifier__min_samples_leaf": [10],
     }
 
     grid_search = GridSearchCV(
@@ -287,9 +294,133 @@ def build_overfit_diagnostics(train_metrics: dict, test_metrics: dict, cv_f1_sco
     }
 
 
+def build_diagnostic_model(preprocessor: ColumnTransformer) -> Pipeline:
+    return Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            (
+                "classifier",
+                RandomForestClassifier(
+                    n_estimators=100,
+                    max_depth=12,
+                    min_samples_split=20,
+                    min_samples_leaf=10,
+                    random_state=42,
+                    class_weight="balanced",
+                    n_jobs=-1,
+                ),
+            ),
+        ]
+    )
+
+
+def evaluate_feature_subset(
+    df: pd.DataFrame,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    target_column: str = TARGET_COLUMN,
+) -> dict:
+    X = df[numeric_features + categorical_features]
+    y = df[target_column]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
+    )
+    model = build_diagnostic_model(
+        ColumnTransformer(
+            transformers=[
+                (
+                    "num",
+                    Pipeline(steps=[("imputer", SimpleImputer(strategy="median"))]),
+                    numeric_features,
+                ),
+                (
+                    "cat",
+                    Pipeline(
+                        steps=[
+                            ("imputer", SimpleImputer(strategy="most_frequent")),
+                            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+                        ]
+                    ),
+                    categorical_features,
+                ),
+            ]
+        )
+    )
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
+    return calculate_binary_metrics(y_test, y_pred, y_prob)
+
+
+def build_red_flag_checks(df: pd.DataFrame, X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.Series, y_test: pd.Series) -> dict:
+    baseline = DummyClassifier(strategy="most_frequent")
+    baseline.fit(X_train, y_train)
+    baseline_pred = baseline.predict(X_test)
+
+    train_full = X_train.copy()
+    train_full[TARGET_COLUMN] = y_train.values
+    test_full = X_test.copy()
+    test_full[TARGET_COLUMN] = y_test.values
+
+    shuffled_df = df.copy()
+    shuffled_df[TARGET_COLUMN] = shuffled_df[TARGET_COLUMN].sample(frac=1, random_state=7).to_numpy()
+    deduplicated_df = df.drop_duplicates().copy()
+
+    full_numeric_features = NUMERIC_FEATURES + ["loan_int_rate"]
+    full_categorical_features = CATEGORICAL_FEATURES + ["loan_grade"]
+    no_grade_categorical_features = CATEGORICAL_FEATURES
+    pre_pricing_numeric_features = NUMERIC_FEATURES
+
+    return {
+        "majority_class_baseline": {
+            "accuracy": float(accuracy_score(y_test, baseline_pred)),
+            "f1_score": float(f1_score(y_test, baseline_pred, zero_division=0)),
+        },
+        "duplicates": {
+            "total_exact_duplicate_rows": int(df.duplicated().sum()),
+            "train_test_exact_duplicate_rows": int(len(pd.merge(train_full, test_full, how="inner"))),
+            "train_test_exact_duplicate_feature_rows": int(len(pd.merge(X_train, X_test, how="inner"))),
+        },
+        "feature_subset_tests": {
+            "without_historical_default": evaluate_feature_subset(df, NUMERIC_FEATURES, CATEGORICAL_FEATURES),
+            "with_loan_grade_and_interest_rate": evaluate_feature_subset(
+                df,
+                full_numeric_features,
+                full_categorical_features,
+            ),
+            "without_loan_grade": evaluate_feature_subset(df, full_numeric_features, no_grade_categorical_features),
+            "without_loan_grade_or_interest_rate": evaluate_feature_subset(
+                df,
+                pre_pricing_numeric_features,
+                no_grade_categorical_features,
+            ),
+            "with_historical_default": evaluate_feature_subset(
+                df,
+                full_numeric_features,
+                full_categorical_features + ["historical_default"],
+            ),
+            "deduplicated_without_historical_default": evaluate_feature_subset(
+                deduplicated_df,
+                NUMERIC_FEATURES,
+                CATEGORICAL_FEATURES,
+            ),
+            "shuffled_target_without_historical_default": evaluate_feature_subset(
+                shuffled_df,
+                NUMERIC_FEATURES,
+                CATEGORICAL_FEATURES,
+            ),
+        },
+    }
+
+
 def write_classification_report_file(metrics: dict, report_text: str) -> None:
     cm = metrics["confusion_matrix"]
     overfit = metrics["overfit_diagnostics"]
+    red_flags = metrics["red_flag_checks"]
     text = f"""Random Forest Classification Report
 ===================================
 
@@ -297,10 +428,10 @@ Model setup:
 - Target column: Current_loan_status
 - 0 = NO DEFAULT
 - 1 = DEFAULT
-- Excluded feature: historical_default
+- Excluded features: historical_default, loan_grade, loan_int_rate
 
 Important note:
-The historical_default column was excluded from the final model because its missing values perfectly identify NO DEFAULT rows in this dataset. Keeping it would cause target leakage and make the accuracy look unrealistically high.
+The historical_default column was excluded from the final model because its missing values perfectly identify NO DEFAULT rows in this dataset. loan_grade and loan_int_rate were also excluded because they are commonly assigned during underwriting/pricing and can act as proxy leakage if the goal is to predict risk before approval.
 
 Final metrics:
 - Accuracy: {metrics["accuracy"]:.4f}
@@ -318,6 +449,17 @@ Overfitting diagnostics:
 - F1 Gap: {overfit["f1_gap"]:.4f}
 - Cross-validation F1 mean: {overfit["cv_f1_mean"]:.4f}
 - Cross-validation F1 std: {overfit["cv_f1_std"]:.4f}
+
+Red-flag checks:
+- Majority-class baseline accuracy: {red_flags["majority_class_baseline"]["accuracy"]:.4f}
+- Exact duplicate rows in full dataset: {red_flags["duplicates"]["total_exact_duplicate_rows"]}
+- Exact duplicate rows crossing train/test split: {red_flags["duplicates"]["train_test_exact_duplicate_rows"]}
+- Accuracy with loan_grade and loan_int_rate: {red_flags["feature_subset_tests"]["with_loan_grade_and_interest_rate"]["accuracy"]:.4f}
+- Accuracy without loan_grade but with loan_int_rate: {red_flags["feature_subset_tests"]["without_loan_grade"]["accuracy"]:.4f}
+- Final accuracy without loan_grade or loan_int_rate: {red_flags["feature_subset_tests"]["without_loan_grade_or_interest_rate"]["accuracy"]:.4f}
+- Accuracy after removing exact duplicate rows: {red_flags["feature_subset_tests"]["deduplicated_without_historical_default"]["accuracy"]:.4f}
+- Accuracy with known leakage column historical_default: {red_flags["feature_subset_tests"]["with_historical_default"]["accuracy"]:.4f}
+- Shuffled-target ROC AUC: {red_flags["feature_subset_tests"]["shuffled_target_without_historical_default"]["roc_auc"]:.4f}
 
 Confusion matrix:
 - True NO DEFAULT predicted as NO DEFAULT: {cm[0][0]}
@@ -341,6 +483,7 @@ def write_report_explanation(metrics: dict, report_text: str, top_features: pd.D
     )
     cm = metrics["confusion_matrix"]
     overfit = metrics["overfit_diagnostics"]
+    red_flags = metrics["red_flag_checks"]
     report = f"""# Random Forest Credit Risk Report
 
 ## Problem Definition
@@ -360,11 +503,11 @@ Because there are more `NO DEFAULT` records than `DEFAULT` records, accuracy alo
 
 ## Preprocessing
 
-Rows with missing target values were removed, `customer_id` was dropped, money columns were converted to numeric values, and the target labels were converted to `0` and `1`. Numerical missing values are filled with the median. Categorical missing values are filled with the most frequent category and then one-hot encoded. The `historical_default` column was excluded because its missing values perfectly identify `NO DEFAULT` records in this dataset, which would cause target leakage.
+Rows with missing target values were removed, `customer_id` was dropped, money columns were converted to numeric values, and the target labels were converted to `0` and `1`. Numerical missing values are filled with the median. Categorical missing values are filled with the most frequent category and then one-hot encoded. The `historical_default` column was excluded because its missing values perfectly identify `NO DEFAULT` records in this dataset. The `loan_grade` and `loan_int_rate` columns were also excluded from the final model because they are likely assigned during underwriting/pricing and can make the result look stronger than a pre-approval risk model should be.
 
 ## Model
 
-The main model is a regularized Random Forest classifier with 200 trees, `max_depth=16`, `min_samples_leaf=5`, `min_samples_split=10`, `random_state=42`, and `class_weight=\"balanced\"` to reduce the effect of class imbalance and overfitting.
+The main model is a regularized Random Forest classifier with 200 trees, `max_depth=12`, `min_samples_leaf=10`, `min_samples_split=20`, `random_state=42`, and `class_weight=\"balanced\"` to reduce the effect of class imbalance and overfitting.
 
 ## Results
 
@@ -391,6 +534,22 @@ The final model was checked by comparing train and test performance and by runni
 
 The train score is higher than the test score, which is normal for a Random Forest, but the gap is not large enough to indicate a serious overfitting problem. The cross-validation F1 score is also close to the held-out test F1 score, so the model appears to generalize reasonably after removing the leakage feature.
 
+## Red-Flag Checks
+
+The original high-accuracy result was checked against several common failure modes:
+
+- Majority-class baseline accuracy: {red_flags["majority_class_baseline"]["accuracy"]:.4f}
+- Exact duplicate rows in full dataset: {red_flags["duplicates"]["total_exact_duplicate_rows"]}
+- Exact duplicate rows crossing train/test split: {red_flags["duplicates"]["train_test_exact_duplicate_rows"]}
+- Accuracy with `loan_grade` and `loan_int_rate`: {red_flags["feature_subset_tests"]["with_loan_grade_and_interest_rate"]["accuracy"]:.4f}
+- Accuracy without `loan_grade` but with `loan_int_rate`: {red_flags["feature_subset_tests"]["without_loan_grade"]["accuracy"]:.4f}
+- Final accuracy without `loan_grade` or `loan_int_rate`: {red_flags["feature_subset_tests"]["without_loan_grade_or_interest_rate"]["accuracy"]:.4f}
+- Accuracy after removing exact duplicate rows: {red_flags["feature_subset_tests"]["deduplicated_without_historical_default"]["accuracy"]:.4f}
+- Accuracy with the known leakage column `historical_default`: {red_flags["feature_subset_tests"]["with_historical_default"]["accuracy"]:.4f}
+- Shuffled-target ROC AUC: {red_flags["feature_subset_tests"]["shuffled_target_without_historical_default"]["roc_auc"]:.4f}
+
+These checks show that the earlier 90% result was not caused by exact duplicate rows or a broken validation setup. The real problem was feature timing: `loan_grade` and `loan_int_rate` carry lender risk/pricing information. The final model excludes them, so the reported result is lower but more defensible for a pre-approval credit-risk model.
+
 Classification report:
 
 ```text
@@ -412,7 +571,7 @@ The most important error in credit risk is predicting `NO DEFAULT` when the cust
 
 ## Conclusion
 
-After removing the leakage feature and using a more regularized Random Forest, the model gives a more realistic result with no major overfitting signal. The final accuracy is {format_percent(metrics["accuracy"])}, and the F1 score for the `DEFAULT` class is {metrics["f1_score"]:.4f}. The model is better at identifying `NO DEFAULT` customers than `DEFAULT` customers, but it still detects most default cases. The feature importance results show that customer income, interest rate, loan amount, age, home ownership, and loan grade are important predictors for credit risk.
+After removing leakage and proxy-leakage features, the Random Forest model gives a more realistic result with no major overfitting signal. The final accuracy is {format_percent(metrics["accuracy"])}, and the F1 score for the `DEFAULT` class is {metrics["f1_score"]:.4f}. The stricter model is less impressive than the earlier 90% result, but it is more appropriate if predictions are made before loan grade and interest rate are assigned. The feature importance results show that customer income, loan amount, age, home ownership, loan intent, term length, and credit history length are important predictors for credit risk.
 """
     Path("report_explanation.md").write_text(report, encoding="utf-8")
 
@@ -463,6 +622,7 @@ def main() -> None:
     feature_importance_df = save_feature_importance_graph(rf_model)
     cv_f1_scores = cross_val_score(rf_model, X_train, y_train, cv=3, scoring="f1", n_jobs=-1)
     overfit_diagnostics = build_overfit_diagnostics(train_metrics, test_metrics, cv_f1_scores)
+    red_flag_checks = build_red_flag_checks(df, X_train, X_test, y_train, y_test)
 
     grid_search = run_focused_grid_search(rf_model, X_train, y_train)
     tuned_model = grid_search.best_estimator_
@@ -511,9 +671,9 @@ def main() -> None:
         "model": {
             "type": "RandomForestClassifier",
             "n_estimators": 200,
-            "max_depth": 16,
-            "min_samples_split": 10,
-            "min_samples_leaf": 5,
+            "max_depth": 12,
+            "min_samples_split": 20,
+            "min_samples_leaf": 10,
             "random_state": 42,
             "class_weight": "balanced",
         },
@@ -528,6 +688,7 @@ def main() -> None:
         },
         "train_metrics": train_metrics,
         "overfit_diagnostics": overfit_diagnostics,
+        "red_flag_checks": red_flag_checks,
         "tuning": tuned_metrics,
         "created_graphs": [
             "figures/target_distribution.svg",

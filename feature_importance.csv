@@ -1,0 +1,17 @@
+Feature,Importance
+num__customer_income,0.33599227910362767
+num__loan_amnt,0.17837001479177775
+cat__home_ownership_RENT,0.11327008961158481
+cat__home_ownership_MORTGAGE,0.06318866356207549
+num__customer_age,0.04678609682110999
+num__employment_duration,0.04242706504975827
+num__term_years,0.03963247050010352
+num__cred_hist_length,0.03561119635798705
+cat__home_ownership_OWN,0.035024292796747104
+cat__loan_intent_DEBTCONSOLIDATION,0.02928697860226943
+cat__loan_intent_HOMEIMPROVEMENT,0.02100303319487041
+cat__loan_intent_MEDICAL,0.019417758988497274
+cat__loan_intent_VENTURE,0.01856262098208188
+cat__loan_intent_EDUCATION,0.0136828182676345
+cat__loan_intent_PERSONAL,0.00698517781309624
+cat__home_ownership_OTHER,0.0007594435567786525
